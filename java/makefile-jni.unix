@@ -1,0 +1,212 @@
+# This makefile is a simpler alternative to the autoconf-based build
+# system, for simple local building of the libraries and tools.
+# It will not install the libraries system-wide, but just create the 'cwebp'
+# and 'dwebp' tools in the examples/ directory, along with the static
+# libraries 'src/libwebp.a' and 'src/mux/libwebpmux.a'.
+#
+# To build the library and examples, use:
+#    make -f makefile.unix
+# from this top directory.
+
+#### Customizable part ####
+BASEDIR=..
+SRCDIR=$(BASEDIR)/src
+
+# These flag assume you have libpng and libjpeg installed. If not, either
+# follow below install instructions or just comment out the next lines.
+#EXTRA_FLAGS= -DWEBP_HAVE_PNG -DWEBP_HAVE_JPEG
+#EXTRA_LIBS= -lpng -ljpeg -lz
+ifeq ($(strip $(shell uname)), Darwin)
+  EXTRA_FLAGS += -I/opt/local/include
+  EXTRA_LIBS  += -L/opt/local/lib
+  LIB_PREFIX = lib
+  LIB_SUFFIX = so
+else ifeq ($(strip $(shell uname)), Linux)
+  EXTRA_FLAGS += -fPIC
+  JNI_MD = linux
+  LIB_PREFIX = lib
+  LIB_SUFFIX = so
+else
+  JNI_MD = win32
+  LIB_PREFIX =
+  LIB_SUFFIX = dll
+  LDFLAGS = -Wl,--add-stdcall-alias
+endif
+
+# To install libraries on Mac OS X:
+# 1. Install MacPorts (http://www.macports.org/install.php)
+# 2. Run "sudo port install jpeg"
+# 3. Run "sudo port install libpng"
+
+# To install libraries on Linux:
+# 1. Run "sudo apt-get install libjpeg62-dev"
+# 2. Run "sudo apt-get install libpng12-dev"
+
+# Uncomment for build for 32bit platform
+# Alternatively, you can just use the command
+# 'make -f makefile.unix EXTRA_FLAGS=-m32' to that effect.
+#EXTRA_FLAGS += -m32
+
+# Extra flags to enable experimental features and code
+# EXTRA_FLAGS += -DWEBP_EXPERIMENTAL_FEATURES
+EXTRA_FLAGS += -DUSE_LOSSLESS_ENCODER
+
+# Extra flags to enable multi-threading
+#EXTRA_FLAGS += -DWEBP_USE_THREAD
+#EXTRA_LIBS += -lpthread
+
+# Extra flags to emulate C89 strictness with the full ANSI
+EXTRA_FLAGS += -Wextra -Wold-style-definition
+EXTRA_FLAGS += -Wmissing-prototypes
+EXTRA_FLAGS += -Wmissing-declarations
+EXTRA_FLAGS += -Wdeclaration-after-statement
+# EXTRA_FLAGS += -Wvla
+
+INCLUDES = -I$(SRCDIR)/
+
+INCLUDES += -I$(JDK_HOME)/include/
+INCLUDES += -I$(JDK_HOME)/include/$(JNI_MD)
+
+#### Nothing should normally be changed below this line ####
+
+AR = ar
+ARFLAGS = r
+CC = gcc
+CPPFLAGS = $(INCLUDES) -Wall
+CFLAGS = -O3 -DNDEBUG $(EXTRA_FLAGS)
+INSTALL = install
+GROFF = /usr/bin/groff
+COL = /usr/bin/col
+LDFLAGS := $(EXTRA_LIBS) -lm $(LDFLAGS)
+
+DEC_OBJS = \
+    $(SRCDIR)/dec/alpha.o \
+    $(SRCDIR)/dec/buffer.o \
+    $(SRCDIR)/dec/frame.o \
+    $(SRCDIR)/dec/idec.o \
+    $(SRCDIR)/dec/io.o \
+    $(SRCDIR)/dec/layer.o \
+    $(SRCDIR)/dec/quant.o \
+    $(SRCDIR)/dec/tree.o \
+    $(SRCDIR)/dec/vp8.o \
+    $(SRCDIR)/dec/vp8l.o \
+    $(SRCDIR)/dec/webp.o \
+
+DSP_OBJS = \
+    $(SRCDIR)/dsp/cpu.o \
+    $(SRCDIR)/dsp/dec.o \
+    $(SRCDIR)/dsp/dec_neon.o \
+    $(SRCDIR)/dsp/dec_sse2.o \
+    $(SRCDIR)/dsp/enc.o \
+    $(SRCDIR)/dsp/enc_sse2.o \
+    $(SRCDIR)/dsp/lossless.o \
+    $(SRCDIR)/dsp/upsampling.o \
+    $(SRCDIR)/dsp/upsampling_sse2.o \
+    $(SRCDIR)/dsp/yuv.o \
+
+ENC_OBJS = \
+    $(SRCDIR)/enc/alpha.o \
+    $(SRCDIR)/enc/analysis.o \
+    $(SRCDIR)/enc/backward_references.o \
+    $(SRCDIR)/enc/config.o \
+    $(SRCDIR)/enc/cost.o \
+    $(SRCDIR)/enc/filter.o \
+    $(SRCDIR)/enc/frame.o \
+    $(SRCDIR)/enc/histogram.o \
+    $(SRCDIR)/enc/iterator.o \
+    $(SRCDIR)/enc/layer.o \
+    $(SRCDIR)/enc/picture.o \
+    $(SRCDIR)/enc/quant.o \
+    $(SRCDIR)/enc/syntax.o \
+    $(SRCDIR)/enc/tree.o \
+    $(SRCDIR)/enc/vp8l.o \
+    $(SRCDIR)/enc/webpenc.o \
+
+MUX_OBJS = \
+    $(SRCDIR)/mux/muxedit.o \
+    $(SRCDIR)/mux/muxinternal.o \
+    $(SRCDIR)/mux/muxread.o \
+
+UTILS_OBJS = \
+    $(SRCDIR)/utils/bit_reader.o \
+    $(SRCDIR)/utils/bit_writer.o \
+    $(SRCDIR)/utils/color_cache.o \
+    $(SRCDIR)/utils/filters.o \
+    $(SRCDIR)/utils/huffman.o \
+    $(SRCDIR)/utils/huffman_encode.o \
+    $(SRCDIR)/utils/quant_levels.o \
+    $(SRCDIR)/utils/rescaler.o \
+    $(SRCDIR)/utils/thread.o \
+
+JNI_OBJS = \
+    src/main/c/libwebp_jni.o \
+
+LIBWEBP_OBJS = $(DEC_OBJS) $(DSP_OBJS) $(ENC_OBJS) $(UTILS_OBJS)
+LIBWEBPMUX_OBJS = $(MUX_OBJS)
+
+HDRS = \
+    $(SRCDIR)/dec/vp8i.h \
+    $(SRCDIR)/dec/vp8li.h \
+    $(SRCDIR)/dec/webpi.h \
+    $(SRCDIR)/dsp/dsp.h \
+    $(SRCDIR)/dsp/lossless.h \
+    $(SRCDIR)/dsp/yuv.h \
+    $(SRCDIR)/enc/cost.h \
+    $(SRCDIR)/enc/vp8enci.h \
+    $(SRCDIR)/utils/bit_reader.h \
+    $(SRCDIR)/utils/bit_writer.h \
+    $(SRCDIR)/utils/color_cache.h \
+    $(SRCDIR)/utils/filters.h \
+    $(SRCDIR)/utils/huffman.h \
+    $(SRCDIR)/utils/huffman_encode.h \
+    $(SRCDIR)/utils/quant_levels.h \
+    $(SRCDIR)/utils/rescaler.h \
+    $(SRCDIR)/utils/thread.h \
+    $(SRCDIR)/webp/decode.h \
+    $(SRCDIR)/webp/decode_vp8.h \
+    $(SRCDIR)/webp/encode.h \
+    $(SRCDIR)/webp/format_constants.h \
+    $(SRCDIR)/webp/mux.h \
+    $(SRCDIR)/webp/types.h \
+
+OUT_JNI = $(LIB_PREFIX)webp_jni.$(LIB_SUFFIX)
+
+OUTPUT = $(OUT_JNI)
+
+all: jni
+
+%.o: %.c $(HDRS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+%.a:
+	$(AR) $(ARFLAGS) $@ $^
+
+$(OUT_JNI): $(LIBWEBP_OBJS) $(JNI_OBJS)
+	$(CC) -shared $(CFLAGS) $(LDFLAGS) -fPIC -fno-strict-aliasing -O2 $(INCLUDES) -o $@ $^
+jni: $(OUT_JNI)
+
+clean:
+	$(RM) $(OUTPUT) *~ \
+              $(SRCDIR)/dec/*.o $(SRCDIR)/dec/*~ \
+              $(SRCDIR)/dsp/*.o $(SRCDIR)/dsp/*~ \
+              $(SRCDIR)/enc/*.o $(SRCDIR)/enc/*~ \
+              $(SRCDIR)/mux/*.o $(SRCDIR)/mux/*~ \
+              $(SRCDIR)/utils/*.o $(SRCDIR)/utils/*~ \
+              $(SRCDIR)/webp/*~ man/*~ doc/*~ swig/*~ \
+              src/main/c/*.o src/main/c/*~
+
+superclean: clean
+	$(RM) -r .git *.log *.cache *~
+	$(RM) -r .deps */.deps */*/.deps
+	$(RM) -r .libs */.libs */*/.libs
+	$(RM) */*.lo */*/*.lo
+	$(RM) */*.la */*/*.la
+	$(RM) Makefile */Makefile */*/Makefile
+	$(RM) Makefile.in */Makefile.in */*/Makefile.in
+	$(RM) config.log autom4te.cache libtool config.h stamp-h1
+	$(RM) aclocal.m4 compile config.guess config.h.in config.sub config.status
+	$(RM) configure depcomp install-sh ltmain.sh missing $(SRCDIR)/libwebp.pc
+	$(RM) m4/*
+
+.PHONY: all clean dist superclean
+.SUFFIXES:
